@@ -1,3 +1,8 @@
+import json
+import logging
+import logging.handlers
+import os
+
 from rich.console import Console
 from rich.text import Text
 
@@ -63,6 +68,81 @@ def info(msg):
 
 def warn(msg):
     console.print(Text("[sysspy] ", style="bold yellow") + Text(msg, style="yellow"))
+
+
+# --------------------------------------------------------------------------- #
+# Файловый лог для внешнего анализа (JSON-строки, ротация по размеру)
+# --------------------------------------------------------------------------- #
+
+file_logger = logging.getLogger("sysspy.file")
+_file_log_enabled = False
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record):
+        payload = getattr(record, "payload", None)
+        obj = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+        }
+        if payload:
+            obj.update(payload)
+        else:
+            obj["message"] = record.getMessage()
+        return json.dumps(obj, ensure_ascii=False)
+
+
+def setup_file_log(path, verbose=False, max_bytes=5 * 1024 * 1024, backups=3):
+    """Включить запись событий в файл (JSON-строки) с ротацией по размеру.
+
+    verbose=True добавляет отладочные события (detector_run и т.п.).
+    """
+    global _file_log_enabled
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    for h in list(file_logger.handlers):
+        file_logger.removeHandler(h)
+    handler = logging.handlers.RotatingFileHandler(
+        path, maxBytes=max_bytes, backupCount=backups, encoding="utf-8"
+    )
+    handler.setFormatter(_JsonFormatter())
+    file_logger.addHandler(handler)
+    file_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    file_logger.propagate = False
+    _file_log_enabled = True
+
+
+def _emit(level, payload):
+    if not _file_log_enabled:
+        return
+    file_logger.log(level, "event", extra={"payload": payload})
+
+
+def log_finding(f):
+    _emit(
+        logging.INFO,
+        {
+            "event": "finding",
+            "severity": f.severity.value,
+            "category": f.category,
+            "title": f.title,
+            "detail": f.detail,
+            "timestamp": f.timestamp,
+        },
+    )
+
+
+def log_event(level, event, **data):
+    lvl = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }.get(level, logging.INFO)
+    payload = {"event": event}
+    payload.update(data)
+    _emit(lvl, payload)
 
 
 def render_text(findings):

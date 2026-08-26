@@ -18,6 +18,7 @@ def _state(config):
 
 def cmd_scan(args, config):
     state = _state(config)
+    reporting.log_event("info", "scan_start", db=config.db_path)
     findings = daemon.run_cycle(state, config)
     _print_summary(findings, state)
     state.close()
@@ -29,11 +30,16 @@ def cmd_watch(args, config):
     reporting.banner(
         f"мониторинг запущен (БД={config.db_path}); Ctrl-C для остановки"
     )
+    reporting.log_event("info", "monitor_start", db=config.db_path)
     daemon.run(
         config,
         state,
-        on_finding=lambda f: reporting.print_finding(f, compact=True),
+        on_finding=lambda f: (
+            reporting.print_finding(f, compact=True),
+            reporting.log_finding(f),
+        ),
     )
+    reporting.log_event("info", "monitor_stop")
     state.close()
 
 
@@ -140,6 +146,8 @@ def _print_summary(findings, state):
         )
         return
     reporting.print_findings(findings)
+    for f in findings:
+        reporting.log_finding(f)
     counts = state.count_findings()
     reporting.console.print("\nИтого в БД по уровням:", counts)
 
@@ -149,6 +157,22 @@ def build_parser():
         prog="sysspy", description="Лёгкий детектор шпионского ПО / вторжений для Linux"
     )
     p.add_argument("--db", default=None, help="путь к базе SQLite")
+    p.add_argument(
+        "--log", default=None, metavar="FILE",
+        help="записывать события в файл (JSON-строки) для внешнего анализа",
+    )
+    p.add_argument(
+        "--verbose", action="store_true",
+        help="подробный лог: включать отладочные события (detector_run и т.п.)",
+    )
+    p.add_argument(
+        "--log-size", type=int, default=5 * 1024 * 1024,
+        help="максимальный размер лог-файла в байтах до ротации (по умолчанию 5 МБ)",
+    )
+    p.add_argument(
+        "--log-backups", type=int, default=3,
+        help="число хранимых ротированных копий лога (по умолчанию 3)",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("scan", help="запустить все детекторы один раз и сохранить находки")
@@ -171,6 +195,14 @@ def main(argv=None):
     config = Config()
     if args.db:
         config.db_path = args.db
+    if args.log:
+        reporting.setup_file_log(
+            args.log,
+            verbose=args.verbose,
+            max_bytes=args.log_size,
+            backups=args.log_backups,
+        )
+        reporting.log_event("info", "start", command=args.cmd, db=config.db_path)
     dispatch = {
         "scan": cmd_scan,
         "watch": cmd_watch,

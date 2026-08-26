@@ -29,6 +29,7 @@ def run_cycle(state, config):
     for name, fn in _SCAN_FUNCS.items():
         if name == "integrity" and not state.get_kv("baseline_done"):
             continue
+        reporting.log_event("debug", "detector_run", detector=name)
         try:
             fs = fn(state, config)
         except Exception as e:
@@ -60,6 +61,7 @@ def run(config, state, on_finding=None):
             for name, interval in CADENCE.items():
                 if now - last.get(name, 0) >= interval:
                     last[name] = now
+                    reporting.log_event("debug", "detector_run", detector=name)
                     fn = _SCAN_FUNCS[name]
                     if name == "integrity" and not state.get_kv("baseline_done"):
                         continue

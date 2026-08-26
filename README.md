@@ -56,6 +56,30 @@ sudo systemctl enable --now sysspy
 > чужих сокетов и не читаются `/proc/<pid>/fd` других пользователей — часть
 > сетевых и кейлоггер-проверок будет неполной.
 
+## Логирование для внешнего анализа
+
+Ключ `--log FILE` (указывается **перед** подкомандой, как и `--db`) включает
+запись событий в файл в виде JSON-строк (по одной на событие) — удобно для
+сбора внешней SIEM/аналитикой. Формат строки:
+
+```json
+{"ts":"2026-08-26T20:02:00","level":"INFO","event":"finding",
+ "severity":"ВЫСОКИЙ","category":"файлы","title":"...","detail":"...","timestamp":"..."}
+```
+
+События: `start`, `scan_start`, `monitor_start`/`monitor_stop`,
+`detector_run` (только при `--verbose`), `finding`. Ротация по размеру
+встроена (`RotatingFileHandler`):
+
+```bash
+# писать в файл, подробно, ротировать после 1 МБ, хранить 5 копий
+python3 -m sysspy --log /var/log/sysspy.jsonl --verbose \
+        --log-size 1048576 --log-backups 5 watch
+```
+
+Без `--verbose` в лог попадают только значимые события (`INFO` и выше);
+`--verbose` добавляет отладочные (`detector_run` и пр.).
+
 ## Хранение данных
 
 Все результаты пишутся в SQLite-файл: `~/.sysspy/sysspy.db` для пользователя
