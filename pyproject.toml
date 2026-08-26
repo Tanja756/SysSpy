@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sysspy"
+version = "0.1.0"
+description = "Lightweight spyware / intrusion detector for Linux"
+requires-python = ">=3.8"
+dependencies = ["psutil", "rich"]
+
+[project.optional-dependencies]
+watch = ["watchdog"]
+
+[project.scripts]
+sysspy = "sysspy.cli:main"
+
+[tool.setuptools]
+packages = ["sysspy", "sysspy.detectors"]

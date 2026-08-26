@@ -1,0 +1,15 @@
+[Unit]
+Description=Демон мониторинга SysSpy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m sysspy watch
+WorkingDirectory=/home/unknown/@temp/SysSpy
+Environment=PYTHONPATH=/home/unknown/@temp/SysSpy
+Environment=SYSSPY_DB=/var/lib/sysspy/sysspy.db
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target

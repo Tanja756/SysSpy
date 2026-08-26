@@ -1,0 +1,4 @@
+psutil
+rich
+# optional, enables real-time filesystem watching:
+# watchdog

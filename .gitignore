@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- SysSpy ---
+# База данных SQLite (находки и базовые линии) — не коммитить.
+*.db
+*.db-journal
+sysspy.db
+
+# Логи и отчёты, генерируемые во время работы
+sysspy_watch.log
+sysspy_report.html
+report.html
+
+# Виртуальное окружение
+.venv/
+venv/
