@@ -17,6 +17,8 @@ try:
                 return
             if any(path.startswith(p) for p in ("/proc", "/sys", "/dev", "/run")):
                 return
+            if self.config.is_ignored(path):
+                return
             reasons = []
             if any(path.startswith(s) for s in self.config.suspicious_exe_paths):
                 reasons.append("временный-путь")
@@ -35,6 +37,7 @@ try:
                         "Подозрительное событие с файлом",
                         f"{path} причины={reasons}",
                         Severity.HIGH,
+                        key="watch:" + path,
                     )
                 )
 
@@ -58,6 +61,8 @@ except ImportError:
                 return
             if any(path.startswith(p) for p in ("/proc", "/sys", "/dev", "/run")):
                 return
+            if self.config.is_ignored(path):
+                return
             reasons = []
             if any(path.startswith(s) for s in self.config.suspicious_exe_paths):
                 reasons.append("временный-путь")
@@ -76,6 +81,7 @@ except ImportError:
                         "Подозрительное событие с файлом",
                         f"{path} причины={reasons}",
                         Severity.HIGH,
+                        key="watch:" + path,
                     )
                 )
 
@@ -133,6 +139,8 @@ def scan(state, config, days=1):
                 continue
             for fn in fns:
                 path = os.path.join(dp, fn)
+                if config.is_ignored(path):
+                    continue
                 try:
                     st = os.lstat(path)
                 except Exception:
@@ -156,6 +164,7 @@ def scan(state, config, days=1):
                             "Недавняя активность во временном каталоге",
                             f"mtime={time.ctime(st.st_mtime)} {path}",
                             sev,
+                            key="tmp:" + path,
                         )
                     )
                 elif executable:
@@ -165,6 +174,7 @@ def scan(state, config, days=1):
                             "Новый/изменённый исполняемый файл в системном каталоге",
                             f"mtime={time.ctime(st.st_mtime)} {path}",
                             Severity.WARN,
+                            key="newexe:" + path,
                         )
                     )
     return findings

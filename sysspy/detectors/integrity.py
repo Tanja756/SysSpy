@@ -52,6 +52,17 @@ def init_baseline(state, config):
     return len(pairs)
 
 
+def reset_baseline(state, config):
+    """Сбрасывает базовую линию целостности и пересоздаёт её заново.
+
+    Полезно, когда предыдущая линия устарела (например, из-за легитимного
+    обновления пакетов: JVM, libc и т.п.), что иначе порождало бы ложные
+    срабатывания «Файл изменён»."""
+    state.delete_kv_prefix("integ:")
+    state.set_kv("baseline_done", "0")
+    return init_baseline(state, config)
+
+
 def check(state, config):
     findings = []
     for path in _collect_targets(config):
@@ -71,6 +82,7 @@ def check(state, config):
                     "Новый файл (не в базовой линии)",
                     f"{path}",
                     Severity.WARN,
+                    key="integ:" + path,
                 )
             )
             continue
@@ -89,6 +101,7 @@ def check(state, config):
                     "Файл из базовой линии удалён",
                     f"{path} был в базовой линии, но теперь отсутствует",
                     Severity.WARN,
+                    key="integ:" + path,
                 )
             )
             continue
@@ -99,6 +112,7 @@ def check(state, config):
                     "Файл изменён с момента создания базовой линии",
                     f"{path} хеш изменился",
                     Severity.HIGH,
+                    key="integ:" + path,
                 )
             )
     return findings

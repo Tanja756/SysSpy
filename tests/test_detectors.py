@@ -23,6 +23,8 @@ import pytest
 
 from sysspy import detectors
 from sysspy.config import Config
+from sysspy.daemon import _emit
+from sysspy.finding import Finding, Severity
 from sysspy.state import State
 
 
@@ -35,6 +37,48 @@ def env(tmp_path):
     state = State(str(db))
     yield config, state
     state.close()
+
+
+# --------------------------------------------------------------------------- #
+# ядро: ключи дедупликации и подавление повторов
+# --------------------------------------------------------------------------- #
+
+def test_finding_identity():
+    """Одинаковый явный key => одна логическая находка; без key — по полям."""
+    a = Finding("процессы", "Высокая загрузка CPU", "PID 1 cpu=90%", key="cpu:1")
+    b = Finding("процессы", "Высокая загрузка CPU", "PID 1 cpu=91%", key="cpu:1")
+    assert a.identity() == b.identity() == "cpu:1"
+    c = Finding("процессы", "X", "Y")
+    d = Finding("процессы", "X", "Y")
+    assert c.identity() == d.identity()
+    e = Finding("процессы", "X", "Z")
+    assert e.identity() != c.identity()
+
+
+def test_daemon_dedup_suppresses_repeats(env):
+    """_emit печатает и пишет в БД находку только при первом появлении."""
+    config, state = env
+    seen = {}
+    printed = []
+    f = Finding("процессы", "Высокая загрузка CPU", "PID 1", Severity.WARN, key="cpu:1")
+    _emit(f, seen, state, lambda x: printed.append(x))
+    _emit(f, seen, state, lambda x: printed.append(x))
+    assert len(printed) == 1, printed
+    assert seen["cpu:1"]["count"] == 2
+    # Эскалация уровня должна снова вывести находку.
+    f2 = Finding("процессы", "Высокая загрузка CPU", "PID 1", Severity.CRITICAL, key="cpu:1")
+    _emit(f2, seen, state, lambda x: printed.append(x))
+    assert len(printed) == 2
+    assert seen["cpu:1"]["sev"] == Severity.CRITICAL
+
+
+def test_config_is_ignored():
+    config = Config()
+    assert config.is_ignored("/tmp/sysspy_watch.log")
+    assert config.is_ignored("/tmp/sysspy_test_run.db")
+    assert config.is_ignored("/tmp/.pytest_cache/foo")
+    assert config.is_ignored("/var/log/syslog")
+    assert not config.is_ignored("/tmp/legit.bin")
 
 
 # --------------------------------------------------------------------------- #

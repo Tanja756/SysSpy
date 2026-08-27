@@ -49,6 +49,7 @@ def scan(state, config):
                     "Исполняемый файл в подозрительном расположении",
                     f"PID {pid} пользователь={user} exe={exe}\n    cmd={cmd[:200]}",
                     Severity.HIGH,
+                    key=f"proc_exe:{pid}:{exe}",
                 )
             )
 
@@ -61,6 +62,7 @@ def scan(state, config):
                     f"PID {pid} exe={exe} cpu={cpu:.1f}% mem={mem:.1f}% "
                     f"cmd={cmd[:150]}",
                     Severity.WARN,
+                    key=f"cpu:{pid}",
                 )
             )
 
@@ -73,6 +75,7 @@ def scan(state, config):
                     "Возможна загрузка и выполнение",
                     f"PID {pid} пользователь={user} cmd={cmd[:200]}",
                     Severity.HIGH,
+                    key=f"dlx:{pid}",
                 )
             )
 
@@ -85,6 +88,7 @@ def scan(state, config):
                     "Процесс маскируется под системный компонент",
                     f"PID {pid} cmd={cmd[:200]} exe={exe}",
                     Severity.HIGH,
+                    key=f"mask:{pid}",
                 )
             )
 
@@ -99,6 +103,7 @@ def scan(state, config):
                 "Возможны скрытые процессы",
                 f"PID в /proc, но отсутствующие в выводе psutil: {hidden[:60]}",
                 Severity.WARN,
+                key="hidden_procs",
             )
         )
 

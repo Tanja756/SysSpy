@@ -47,14 +47,51 @@ def run_cycle(state, config):
     return findings
 
 
-def run(config, state, on_finding=None):
-    """Цикл мониторинга на переднем плане. Вызывает on_finding(Finding) по мере событий."""
+def _emit(f, seen, state, on_finding):
+    """Обрабатывает одну находку: логирует всегда, дедуплицирует вывод/БД.
+
+    JSON-лог (``reporting.log_finding``) получает ВСЕ вхождения. Консоль и БД
+    получают находку только при первом появлении либо при эскалации уровня —
+    повторы одной и той же логической находки не дублируются.
+    """
+    reporting.log_finding(f)
+    k = f.identity()
+    rec = seen.get(k)
+    if rec is None:
+        seen[k] = {
+            "first": f.timestamp,
+            "last": f.timestamp,
+            "count": 1,
+            "sev": f.severity,
+        }
+        state.add_finding(f)
+        if on_finding:
+            on_finding(f)
+        return
+    rec["last"] = f.timestamp
+    rec["count"] += 1
+    if reporting.SEV_ORDER[f.severity] < reporting.SEV_ORDER[rec["sev"]]:
+        rec["sev"] = f.severity
+        if on_finding:
+            on_finding(f)
+
+
+def run(config, state, on_finding=None, summary_every=12):
+    """Цикл мониторинга на переднем плане. Вызывает on_finding(Finding) по мере событий.
+
+    Повторяющиеся находки (один и тот же ``identity()``) печатаются и пишутся
+    в БД только при первом появлении; последующие вхождения тихо учитываются
+    в сводке, но не дублируют вывод. JSON-лог (``reporting.log_finding``) при
+    этом получает ВСЕ вхождения — для внешней системы анализа важна полнота.
+    """
     observer = detectors.filesystem.start_watchdog(state, config)
     if observer is None:
         reporting.warn(
             "watchdog недоступен; используется периодическое сканирование файлов"
         )
     last = {}
+    seen = {}
+    cycle = 0
     try:
         while True:
             now = time.time()
@@ -77,9 +114,10 @@ def run(config, state, on_finding=None):
                             )
                         ]
                     for f in fs:
-                        state.add_finding(f)
-                        if on_finding:
-                            on_finding(f)
+                        _emit(f, seen, state, on_finding)
+            cycle += 1
+            if summary_every and cycle % summary_every == 0:
+                reporting.print_watch_summary(seen)
             time.sleep(5)
     except KeyboardInterrupt:
         pass

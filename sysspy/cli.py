@@ -34,10 +34,8 @@ def cmd_watch(args, config):
     daemon.run(
         config,
         state,
-        on_finding=lambda f: (
-            reporting.print_finding(f, compact=True),
-            reporting.log_finding(f),
-        ),
+        on_finding=lambda f: reporting.print_finding(f, compact=True),
+        summary_every=getattr(args, "summary_every", 0) or 12,
     )
     reporting.log_event("info", "monitor_stop")
     state.close()
@@ -74,8 +72,8 @@ def cmd_report(args, config):
 
 def cmd_baseline(args, config):
     state = _state(config)
-    if args.action == "init":
-        n = detectors.integrity.init_baseline(state, config)
+    if args.action in ("init", "reset"):
+        n = detectors.integrity.reset_baseline(state, config)
         reporting.console.print(
             f"Базовая линия целостности создана для {n} файлов.", style="green"
         )
@@ -176,13 +174,17 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("scan", help="запустить все детекторы один раз и сохранить находки")
-    sub.add_parser("watch", help="запустить цикл мониторинга на переднем плане")
+    w = sub.add_parser("watch", help="запустить цикл мониторинга на переднем плане")
+    w.add_argument(
+        "--summary-every", type=int, default=12, metavar="N",
+        help="печатать сводку активных находок каждые N циклов (0 — отключить)",
+    )
     sub.add_parser("status", help="показать последние находки из базы")
     rp = sub.add_parser("report", help="сформировать отчёт")
     rp.add_argument("--html", default=None, help="записать HTML-отчёт в этот файл")
     rp.add_argument("--days", type=int, default=7, help="охватить N дней")
     bl = sub.add_parser("baseline", help="управление базовой линией целостности")
-    bl.add_argument("action", choices=["init", "check"])
+    bl.add_argument("action", choices=["init", "reset", "check"])
     sv = sub.add_parser("service", help="управление systemd-сервисом")
     sv.add_argument("action", choices=["install", "start", "stop", "status"])
     cd = sub.add_parser("cleandb", help="полностью очистить базу данных (находки и базовые линии)")

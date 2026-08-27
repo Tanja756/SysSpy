@@ -161,6 +161,11 @@ class State:
             r = cur.fetchone()
             return r[0] if r else None
 
+    def delete_kv_prefix(self, prefix):
+        """Удаляет все kv-записи, ключ которых начинается с prefix."""
+        with self._cur() as cur:
+            cur.execute("DELETE FROM kv WHERE key LIKE ?", (prefix + "%",))
+
     def clear(self):
         """Удаляет все находки и базовые линии (findings/connections/modules/kv)."""
         total = 0

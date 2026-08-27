@@ -1,3 +1,4 @@
+import fnmatch
 import os
 from pathlib import Path
 
@@ -56,3 +57,26 @@ class Config:
             "crypto", "ip_", "nf_", "xhci", "ahci", "ext4", "btrfs", "overlay",
             "bridge", "veth", "iptable", "usb", "tls", "cmac", "cfg80211",
         )
+
+        # Пути/шаблоны, которые не должны попадать в находки (собственные
+        # артефакты SysSpy, мусор тестов, высокоактивные системные логи).
+        self.ignore_globs = [
+            "*/sysspy_watch.log",
+            "*/sysspy_report.html",
+            "*/sysspy_report",
+            "*/sysspy*.db",
+            "/tmp/.pytest_cache/*",
+            "/tmp/pytest-of-*",
+            "/tmp/far2l_*",
+            "/var/log/*",
+            "/var/cache/*",
+        ]
+
+    def is_ignored(self, path):
+        """Возвращает True, если путь совпадает с одним из шаблонов игнорирования."""
+        if not path:
+            return False
+        for g in self.ignore_globs:
+            if fnmatch.fnmatch(path, g) or fnmatch.fnmatch(os.path.abspath(path), g):
+                return True
+        return False

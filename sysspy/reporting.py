@@ -2,6 +2,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 
 from rich.console import Console
 from rich.text import Text
@@ -53,9 +54,116 @@ def print_findings(findings):
     if not findings:
         console.print(Text("Находок нет.", style="green"))
         return
-    for f in _sort(findings):
-        print_finding(f, compact=False)
-        console.print()
+    print_findings_grouped(findings)
+
+
+def _detail_path(detail):
+    """Извлекает путь из detail вида 'mtime=... <путь>' или '<путь> ...'."""
+    if not detail:
+        return ""
+    return detail.rsplit(" ", 1)[-1]
+
+
+def _group_key(f):
+    """Группировка однотипных находок для компактного вывода."""
+    if f.category == "целостность":
+        path = f.detail.split()[0] if f.detail else ""
+        return ("целостность", os.path.dirname(path) or path)
+    if f.category == "файлы":
+        detail_path = _detail_path(f.detail)
+        if f.title.startswith("Недавняя активность"):
+            return ("файлы", "temp", os.path.dirname(detail_path))
+        if "исполняемый" in f.title:
+            return ("файлы", "newexe", os.path.dirname(detail_path))
+        return ("файлы", f.title)
+    if f.category == "процессы":
+        if f.title == "Высокая загрузка CPU":
+            return ("процессы", "cpu")
+        return ("процессы", f.title)
+    return (f.category, f.title)
+
+
+def _print_group(key, items):
+    top = min(items, key=lambda f: SEV_ORDER.get(f.severity, 9))
+    style, label = _sev_style(top.severity)
+    n = len(items)
+    t = Text()
+    t.append(f"[{label}] ", style=style)
+    t.append(f"{key[0]}: ", style="bold")
+    if key[0] == "целостность":
+        t.append(
+            f"Пакет {key[1]} — изменено/обнаружено файлов: {n}",
+            style="italic",
+        )
+    elif key[0] == "файлы" and key[1] == "temp":
+        t.append(
+            f"Активность во временном каталоге {key[2]} — файлов: {n}",
+            style="italic",
+        )
+    elif key[0] == "файлы" and key[1] == "newexe":
+        t.append(
+            f"Новые исполняемые файлы в {key[2]} — {n}",
+            style="italic",
+        )
+    elif key[0] == "процессы" and key[1] == "cpu":
+        pids = set()
+        for f in items:
+            m = re.search(r"PID\s+(\d+)", f.detail)
+            if m:
+                pids.add(int(m.group(1)))
+        shown = ", ".join(str(p) for p in sorted(pids)[:20])
+        more = "" if len(pids) <= 20 else f" …(+{len(pids) - 20})"
+        t.append(
+            f"Высокая загрузка CPU — процессов: {n} (PID: {shown}{more})",
+            style="italic",
+        )
+    else:
+        t.append(f"{items[0].title} — {n}", style="italic")
+    console.print(t)
+    for f in items[:3]:
+        console.print(Text(f"    • {f.detail[:160]}", style="dim"))
+    if n > 3:
+        console.print(Text(f"    …и ещё {n - 3}", style="dim"))
+
+
+def print_findings_grouped(findings):
+    if not findings:
+        console.print(Text("Находок нет.", style="green"))
+        return
+    groups = {}
+    for f in findings:
+        groups.setdefault(_group_key(f), []).append(f)
+
+    def _group_sev(items):
+        return min(SEV_ORDER.get(x.severity, 9) for x in items)
+
+    for key, items in sorted(
+        groups.items(), key=lambda kv: (_group_sev(kv[1]), kv[0][0])
+    ):
+        _print_group(key, items)
+
+
+def print_watch_summary(seen):
+    if not seen:
+        return
+    counts = {}
+    for rec in seen.values():
+        counts[rec["sev"]] = counts.get(rec["sev"], 0) + 1
+    parts = []
+    for sev in (Severity.CRITICAL, Severity.HIGH, Severity.WARN, Severity.INFO):
+        if counts.get(sev):
+            parts.append(f"{sev.value}×{counts[sev]}")
+    t = Text()
+    t.append("[сводка] ", style="bold green")
+    t.append(
+        f"активных находок с запуска: {', '.join(parts) if parts else '0'} ",
+        style="dim",
+    )
+    t.append(
+        "(повторы подавлены; полный список: `sysspy report` / JSON-лог)",
+        style="dim",
+    )
+    console.print(t)
 
 
 def banner(msg):
