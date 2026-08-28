@@ -125,10 +125,27 @@ def scan(state, config, days=1):
     Намеренно узкий, чтобы не шуметь: флагает только исполняемые файлы,
     появившиеся в системных каталогах, либо любую активность во временных
     каталогах. Домашние каталоги исключены (их покрывает real-time слежение
-    за autostart-каталогами)."""
+    за autostart-каталогами).
+
+    Чтобы свежая ОС или обновление пакетов не порождали лавину ложных
+    срабатываний, файлы, существовавшие до создания базовой линии
+    целостности (``baseline init``), не считаются «новыми»."""
     findings = []
     now = time.time()
     cutoff = now - days * 86400
+    baseline_ts = None
+    bt = state.get_kv("baseline_time")
+    if not bt and state.get_kv("baseline_done"):
+        # Миграция: базовая линия создана старой версией без метки времени.
+        # Фиксируем момент первого запуска, чтобы не флагать существующие
+        # системные файлы как «новые» (и не требовать полной переинициализации).
+        bt = time.strftime("%Y-%m-%dT%H:%M:%S")
+        state.set_kv("baseline_time", bt)
+    if bt:
+        try:
+            baseline_ts = time.mktime(time.strptime(bt, "%Y-%m-%dT%H:%M:%S"))
+        except Exception:
+            baseline_ts = None
     sys_roots = ["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/lib", "/opt"]
     for root in sys_roots + config.suspicious_exe_paths:
         if not os.path.isdir(root):
@@ -146,6 +163,10 @@ def scan(state, config, days=1):
                 except Exception:
                     continue
                 if st.st_mtime <= cutoff and st.st_ctime <= cutoff:
+                    continue
+                # Файл старее базовой линии — это штатный системный файл,
+                # а не свежий дроппер; пропускаем.
+                if baseline_ts is not None and st.st_mtime <= baseline_ts:
                     continue
                 ext = os.path.splitext(fn)[1].lower()
                 in_temp = any(path.startswith(s) for s in config.suspicious_exe_paths)

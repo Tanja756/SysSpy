@@ -211,6 +211,27 @@ def test_filesystem_watchdog_handler(env):
     ), [f.detail for f in fs]
 
 
+def test_filesystem_scan_respects_baseline_time(tmp_path, env):
+    """Файлы старее базовой линии не флагаются как «новые»."""
+    config, state = env
+    d = tmp_path / "tmpdir"
+    d.mkdir()
+    config.suspicious_exe_paths = [str(d)]
+    config.ignore_globs = []  # тестовый каталог попадает под /tmp/pytest-of-*
+    baseline = time.time() - 10
+    state.set_kv("baseline_time", time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(baseline)))
+    old = d / "old.so"
+    old.write_text("x")
+    os.utime(old, (baseline - 1000, baseline - 1000))  # до базовой линии
+    new = d / "new.so"
+    new.write_text("x")
+    os.utime(new, (baseline + 100, baseline + 100))  # после базовой линии
+    fs = detectors.filesystem.scan(state, config, days=365)
+    details = [f.detail for f in fs]
+    assert any(str(new) in det for det in details), details
+    assert not any(str(old) in det for det in details), details
+
+
 # --------------------------------------------------------------------------- #
 # сеть
 # --------------------------------------------------------------------------- #

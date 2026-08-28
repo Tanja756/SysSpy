@@ -32,6 +32,38 @@ def exe_of_pid(pid):
         return None
 
 
+def proc_context(pid):
+    """Краткая контекстная строка о процессе: cmdline, cwd, пользователь.
+
+    Помогает понять, что именно запустил процесс и откуда (рабочая директория),
+    что критично для находок сети — одного имени бинарника (python3) недостаточно.
+    """
+    if not pid:
+        return ""
+    try:
+        p = psutil.Process(pid)
+        try:
+            cmd = " ".join(p.cmdline()) or p.name()
+        except Exception:
+            cmd = p.name() if hasattr(p, "name") else "?"
+        try:
+            cwd = p.cwd()
+        except Exception:
+            cwd = None
+        try:
+            user = p.username()
+        except Exception:
+            user = None
+    except Exception:
+        return ""
+    parts = [f"cmd={cmd[:200]}"]
+    if cwd:
+        parts.append(f"cwd={cwd}")
+    if user:
+        parts.append(f"user={user}")
+    return " ".join(parts)
+
+
 def file_sha256(path):
     h = hashlib.sha256()
     try:

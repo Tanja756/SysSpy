@@ -39,6 +39,7 @@ def scan(state, config):
 
         if status == "LISTEN":
             plabel = f"PID {pid} {exe}" if pid else "PID неизвестен (запустите с sudo)"
+            ctx = utils.proc_context(pid) if pid else ""
             if exe and any(s in exe for s in config.trusted_listeners):
                 continue
             if lport and lport in config.suspicious_ports:
@@ -46,7 +47,7 @@ def scan(state, config):
                     Finding(
                         "сеть",
                         "Подозрительный прослушиваемый порт",
-                        f"{plabel} слушает на :{lport}",
+                        f"{plabel} слушает на :{lport} {ctx}".rstrip(),
                         Severity.HIGH,
                     )
                 )
@@ -55,7 +56,7 @@ def scan(state, config):
                     Finding(
                         "сеть",
                         "Слушающий сокет из подозрительного расположения",
-                        f"{plabel} слушает на :{lport}",
+                        f"{plabel} слушает на :{lport} {ctx}".rstrip(),
                         Severity.HIGH,
                     )
                 )
@@ -68,12 +69,14 @@ def scan(state, config):
             if utils.is_local_ip(rip):
                 continue
 
+            conn = f"PID {pid} {exe or '?'} -> {rip}:{rport} ({status})"
+            ctx = utils.proc_context(pid) if pid else ""
             if rport in config.suspicious_ports:
                 findings.append(
                     Finding(
                         "сеть",
                         "Подозрительный внешний порт",
-                        f"PID {pid} {exe} -> {rip}:{rport} ({status})",
+                        f"{conn} {ctx}".rstrip(),
                         Severity.HIGH,
                     )
                 )
@@ -83,7 +86,7 @@ def scan(state, config):
                     Finding(
                         "сеть",
                         "Внешнее соединение из подозрительного расположения",
-                        f"PID {pid} {exe} -> {rip}:{rport} ({status})",
+                        f"{conn} {ctx}".rstrip(),
                         Severity.HIGH,
                     )
                 )
@@ -95,7 +98,7 @@ def scan(state, config):
                         Finding(
                             "сеть",
                             "Новое внешнее соединение",
-                            f"PID {pid} {exe or '?'} -> {rip}:{rport} ({status})",
+                            f"{conn} {ctx}".rstrip(),
                             Severity.INFO,
                         )
                     )

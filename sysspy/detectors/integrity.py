@@ -1,4 +1,5 @@
 import os
+import time
 
 from ..finding import Finding, Severity
 from .. import utils
@@ -49,6 +50,7 @@ def init_baseline(state, config):
             pairs.append(("integ:" + path, f"{h}|{mtime}"))
     state.bulk_kv(pairs)
     state.set_kv("baseline_done", "1")
+    state.set_kv("baseline_time", time.strftime("%Y-%m-%dT%H:%M:%S"))
     return len(pairs)
 
 
@@ -80,7 +82,7 @@ def check(state, config):
                 Finding(
                     "целостность",
                     "Новый файл (не в базовой линии)",
-                    f"{path}",
+                    f"{path} (mtime={time.ctime(mtime)})",
                     Severity.WARN,
                     key="integ:" + path,
                 )
@@ -110,7 +112,8 @@ def check(state, config):
                 Finding(
                     "целостность",
                     "Файл изменён с момента создания базовой линии",
-                    f"{path} хеш изменился",
+                    f"{path} хеш изменился (mtime={time.ctime(mtime)}, "
+                    f"old={old_h[:12]} new={h[:12]})",
                     Severity.HIGH,
                     key="integ:" + path,
                 )
